@@ -1,0 +1,33 @@
+#!/bin/sh
+
+cd "/test" || exit 1
+
+echo "-- deploy chaincodes"
+rsync -r \
+       "/chaincode/public/" \
+       "/data/channel/public/"
+
+echo "-- waiting consistent state"
+include="/state/.include"
+err="yes"
+for i in $(seq 60)
+do
+       echo "-- waiting environment variables: $i"
+       if [ -r "$include" ]
+       then
+              . "$include" && err="no"
+              break
+       else
+              sleep 10
+       fi
+done
+[ "$err" = "yes" ] && exit 1
+
+go mod tidy
+
+echo "-- execute tests"
+gotestsum --junitfile /report/report.xml -- --coverprofile=/report/integration_coverage.out ./... || err="yes"
+
+echo "-- generate report"
+allure generate /report/allure-results --clean -o /report/allure-report
+[ "$err" = "yes" ] && exit 1 || exit 0
